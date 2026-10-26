@@ -48,12 +48,16 @@ TESTS = tests/test_perm tests/test_path tests/test_edit tests/test_bash tests/te
 
 COMPILE = $(CC) $(BEIGE_CFLAGS) $(CFLAGS) $(CPPFLAGS)
 
+# Run the tests through an emulator: make test RUN="qemu-i386 -cpu 486" BEIGE_BIN=/path/to/wrapper
+RUN =
+BEIGE_BIN = $(CURDIR)/beige
+
 .PHONY: all test clean
 
 all: beige
 
 beige: $(OBJS) third_party/cJSON.o
-	$(CC) $(BEIGE_CFLAGS) $(CFLAGS) -o $@ $(OBJS) third_party/cJSON.o $(CURL_LIBS)
+	$(CC) $(BEIGE_CFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJS) third_party/cJSON.o $(CURL_LIBS)
 
 $(OBJS): $(HDRS)
 
@@ -66,40 +70,40 @@ third_party/cJSON.o: third_party/cJSON.c third_party/cJSON.h
 $(TESTS): $(HDRS) tests/check.h
 
 tests/test_perm: $(TEST_PERM_SRCS)
-	$(COMPILE) -o $@ $(TEST_PERM_SRCS)
+	$(COMPILE) $(LDFLAGS) -o $@ $(TEST_PERM_SRCS)
 
 tests/test_path: $(TEST_PATH_SRCS)
-	$(COMPILE) -o $@ $(TEST_PATH_SRCS)
+	$(COMPILE) $(LDFLAGS) -o $@ $(TEST_PATH_SRCS)
 
 tests/test_edit: $(TEST_EDIT_SRCS) third_party/cJSON.o
-	$(COMPILE) $(CURL_CFLAGS) -o $@ $(TEST_EDIT_SRCS) third_party/cJSON.o $(CURL_LIBS)
+	$(COMPILE) $(CURL_CFLAGS) $(LDFLAGS) -o $@ $(TEST_EDIT_SRCS) third_party/cJSON.o $(CURL_LIBS)
 
 tests/test_bash: $(TEST_BASH_SRCS) third_party/cJSON.o
-	$(COMPILE) $(CURL_CFLAGS) -o $@ $(TEST_BASH_SRCS) third_party/cJSON.o $(CURL_LIBS)
+	$(COMPILE) $(CURL_CFLAGS) $(LDFLAGS) -o $@ $(TEST_BASH_SRCS) third_party/cJSON.o $(CURL_LIBS)
 
 tests/test_context: $(TEST_CONTEXT_SRCS)
-	$(COMPILE) -o $@ $(TEST_CONTEXT_SRCS)
+	$(COMPILE) $(LDFLAGS) -o $@ $(TEST_CONTEXT_SRCS)
 
 tests/test_sse: $(TEST_SSE_SRCS) third_party/cJSON.o
-	$(COMPILE) $(CURL_CFLAGS) -o $@ $(TEST_SSE_SRCS) third_party/cJSON.o $(CURL_LIBS)
+	$(COMPILE) $(CURL_CFLAGS) $(LDFLAGS) -o $@ $(TEST_SSE_SRCS) third_party/cJSON.o $(CURL_LIBS)
 
 tests/test_models: $(TEST_MODELS_SRCS) third_party/cJSON.o
-	$(COMPILE) $(CURL_CFLAGS) -o $@ $(TEST_MODELS_SRCS) third_party/cJSON.o $(CURL_LIBS)
+	$(COMPILE) $(CURL_CFLAGS) $(LDFLAGS) -o $@ $(TEST_MODELS_SRCS) third_party/cJSON.o $(CURL_LIBS)
 
 tests/test_text: $(TEST_TEXT_SRCS)
-	$(COMPILE) -o $@ $(TEST_TEXT_SRCS)
+	$(COMPILE) $(LDFLAGS) -o $@ $(TEST_TEXT_SRCS)
 
 test: beige $(TESTS)
-	./tests/test_perm
-	./tests/test_path
-	./tests/test_edit
-	./tests/test_bash
-	./tests/test_context
-	./tests/test_sse
-	./tests/test_models
-	./tests/test_text
-	BEIGE_BIN="$(CURDIR)/beige" sh tests/integration.sh
-	BEIGE_BIN="$(CURDIR)/beige" sh tests/test_slash.sh
+	$(RUN) ./tests/test_perm
+	$(RUN) ./tests/test_path
+	$(RUN) ./tests/test_edit
+	$(RUN) ./tests/test_bash
+	$(RUN) ./tests/test_context
+	$(RUN) ./tests/test_sse
+	$(RUN) ./tests/test_models
+	$(RUN) ./tests/test_text
+	BEIGE_BIN="$(BEIGE_BIN)" sh tests/integration.sh
+	BEIGE_BIN="$(BEIGE_BIN)" sh tests/test_slash.sh
 
 clean:
 	rm -f beige src/*.o third_party/cJSON.o $(TESTS)

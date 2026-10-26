@@ -69,6 +69,31 @@ make CURL_CFLAGS="-I/opt/beige-deps/include" \
 
 Copy a current CA bundle to `~/.beige/cacert.pem` (or set `ca_bundle` in the config). Public APIs will not trust a 2004 certificate store. curl still honors `http_proxy`, `https_proxy`, and `no_proxy`.
 
+### Static binaries
+
+CI builds beige static against musl with `zig cc`, with OpenSSL and curl inside. A binary needs no libc, libcurl, or OpenSSL on the machine, only Linux 2.6 or later. Each build names the oldest CPU it runs on:
+
+| Build | Oldest CPU |
+| --- | --- |
+| `x86_64` | any 64-bit x86 |
+| `i686-sse2` | Pentium 4, Pentium M, Athlon 64 |
+| `i686` | Pentium Pro, Pentium II and III, Athlon, Geode LX. No SSE. |
+| `i486` | 486, Pentium, Pentium MMX, K6, VIA C3. No SSE, MMX, or CMOV. |
+
+There is no 80386 build. musl's atomics need the 486's `cmpxchg`, and Linux dropped the 386 in 3.8.
+
+Each tarball holds `beige`, a CA bundle, and the licenses of what is linked in:
+
+```sh
+tar -xzf beige-0.1.0-linux-i486.tar.gz
+cp beige-0.1.0-linux-i486/beige /usr/local/bin/
+mkdir -p ~/.beige && cp beige-0.1.0-linux-i486/cacert.pem ~/.beige/
+```
+
+CI runs the tests under qemu-user on the oldest CPU model for each build, and scans the `i686` and `i486` binaries for instructions those CPUs lack. It also runs each binary in a CentOS 5 or 6 or Debian 3.1, 4.0, or 5.0 container, though those containers share a current kernel. A `v` tag attaches the tarballs to a GitHub release.
+
+To build one here, run `sh scripts/build-static.sh build i486`, then `check i486`. `build` needs zig 0.15, perl, and make. `check` also needs qemu-user and objdump.
+
 ## Credentials
 
 Config lives in `~/.beige/config.json`. Secrets live in `~/.beige/auth.json` (mode 0600). `BEIGE_HOME` overrides that directory. Environment variables win over the file: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `XAI_API_KEY`.
