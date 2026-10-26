@@ -10,3 +10,4 @@ tests/test_sse
 tests/test_models
 tests/test_text
 .muxel/
+dist/
