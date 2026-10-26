@@ -27,6 +27,8 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libcurl4-openssl-dev
       - run: make -j"$(nproc)"
       - run: make test
+      - name: Check CHANGELOG.md has a section for this version
+        run: sh scripts/release-notes.sh > /dev/null
 
   # Static musl builds, one per CPU floor. See scripts/build-static.sh for what each one targets.
   static:
@@ -42,8 +44,8 @@ jobs:
         with:
           version: ${{ env.ZIG_VERSION }}
           cache-key: ${{ matrix.name }}
-      - name: Install qemu-user
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends qemu-user
+      - name: Install qemu-user and rpmbuild
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends qemu-user rpm
       # The script rebuilds the libraries itself when the restored ones were built with other versions or flags.
       - uses: actions/cache@v6
         with:
@@ -52,14 +54,19 @@ jobs:
           restore-keys: deps-${{ matrix.name }}-zig${{ env.ZIG_VERSION }}-
       - run: sh scripts/build-static.sh build ${{ matrix.name }}
       - run: sh scripts/build-static.sh check ${{ matrix.name }}
+      - run: sh scripts/build-static.sh packages ${{ matrix.name }}
       - uses: actions/upload-artifact@v7
         with:
           name: beige-${{ matrix.name }}
-          path: dist/*.tar.gz
+          path: |
+            dist/*.tar.gz
+            dist/*.deb
+            dist/*.rpm
           if-no-files-found: error
 
-  # Each binary inside an old distribution. The containers share the runner's current kernel, so this
-  # covers the old /bin/sh and filesystem layout, not an old kernel.
+  # Each binary inside an old distribution, and the .deb or .rpm installed there with that distribution's
+  # dpkg or rpm. The containers share the runner's current kernel, so this covers the old userland, not
+  # an old kernel.
   oldroot:
     name: ${{ matrix.image }} (${{ matrix.build }})
     needs: static
@@ -71,6 +78,7 @@ jobs:
           - { build: x86_64, image: 'centos:5', platform: linux/amd64 }
           - { build: x86_64, image: 'debian/eol:sarge', platform: linux/amd64 }
           - { build: i686-sse2, image: 'centos:6', platform: linux/386 }
+          - { build: i486, image: 'centos:6', platform: linux/386 }
           - { build: i686, image: 'debian/eol:lenny', platform: linux/386 }
           - { build: i486, image: 'debian/eol:etch', platform: linux/386 }
     steps:
@@ -88,6 +96,7 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
         with:
           pattern: beige-*
@@ -99,7 +108,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          sh scripts/release-notes.sh "${GITHUB_REF_NAME#v}" > notes.md
           cd dist
-          sha256sum -- *.tar.gz > SHA256SUMS
+          sha256sum -- *.tar.gz *.deb *.rpm > SHA256SUMS
           gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
-            --title "beige ${GITHUB_REF_NAME#v}" --generate-notes *.tar.gz SHA256SUMS
+            --title "beige ${GITHUB_REF_NAME#v}" --notes-file ../notes.md *.tar.gz *.deb *.rpm SHA256SUMS
