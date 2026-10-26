@@ -1,0 +1,12 @@
+beige
+src/*.o
+third_party/*.o
+tests/test_perm
+tests/test_path
+tests/test_edit
+tests/test_bash
+tests/test_context
+tests/test_sse
+tests/test_models
+tests/test_text
+.muxel/

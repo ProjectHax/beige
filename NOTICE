@@ -1,0 +1,45 @@
+Copyright (C) 2026 ProjectHax LLC
+
+beige is free software under the GNU General Public License, version 3.
+The license text is in the file LICENSE.
+
+The coding system prompt in src/context.c is adapted from the gemini prompt
+shipped with OpenCode (https://github.com/anomalyco/opencode):
+
+    MIT License
+
+    Copyright (c) 2025 opencode
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE.
+
+third_party/cJSON.c and third_party/cJSON.h remain under the MIT License,
+Copyright (c) 2009-2017 Dave Gamble and cJSON contributors. Their copyright
+notice is in those files.
+
+The way a model reply is set in src/tui.c follows the scrollback in Grok Build
+(https://github.com/xai-org/grok-build): headings, strong text, lists, quotes,
+and fenced code are styled, and the markdown marks are not shown. Grok Build
+is Copyright 2023-2026 SpaceXAI and is released under the Apache License,
+Version 2.0 (http://www.apache.org/licenses/LICENSE-2.0). beige does not
+include Grok Build source. The renderer in src/tui.c is beige's own code.
+
+No source from Pi (https://pi.dev) or Claude Code is included. The tool list
+follows Pi's small loop (read, edit, write, and a shell). Ask, plan, and auto
+follow the permission modes used by OpenCode and Claude Code. A user turn is
+marked with `>`, which is the mark Claude Code uses for the user's text.
