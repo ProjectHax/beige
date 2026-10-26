@@ -213,6 +213,7 @@ static int do_status(App *app) {
     } else {
         printf("auth: none\n");
     }
+    printf("ca bundle: %s\n", app->http.ca_bundle ? app->http.ca_bundle : "none");
     return 0;
 }
 
@@ -725,6 +726,8 @@ static int slash(App *app, const char *line, int nested) {
         } else {
             ui_log(app->ui, UI_META, "auth: none");
         }
+        snprintf(line, sizeof line, "ca bundle: %s", app->http.ca_bundle ? app->http.ca_bundle : "none");
+        ui_log(app->ui, UI_META, line);
     } else if (str_eq(cmd, "/login")) {
         if (arg) {
             int mark = ui_log_mark(app->ui);
