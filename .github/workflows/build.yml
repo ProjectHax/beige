@@ -76,11 +76,12 @@ jobs:
       matrix:
         include:
           - { build: x86_64, image: 'centos:5', platform: linux/amd64 }
-          - { build: x86_64, image: 'debian/eol:sarge', platform: linux/amd64 }
+          - { build: x86_64, image: 'debian/eol:etch', platform: linux/amd64 }
           - { build: i686-sse2, image: 'centos:6', platform: linux/386 }
           - { build: i486, image: 'centos:6', platform: linux/386 }
           - { build: i686, image: 'debian/eol:lenny', platform: linux/386 }
-          - { build: i486, image: 'debian/eol:etch', platform: linux/386 }
+          # Sarge had no official amd64 port; its amd64-tagged image holds an i386 userland.
+          - { build: i486, image: 'debian/eol:sarge', platform: linux/amd64 }
     steps:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
