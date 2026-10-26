@@ -4,7 +4,7 @@ A release's GitHub page shows its section of this file. CI fails when the versio
 
 ## 0.2.0 - 2026-10-26
 
-- `.deb` and `.rpm` packages of the x86_64 and i486 builds, for Debian 3.1 and CentOS 5 or later. They have no dependencies and install `/usr/bin/beige` with a current CA bundle in `/usr/share/beige`.
+- `.deb` and `.rpm` packages of the x86_64 and i486 builds, for Debian 3.1 (i386) or 4.0 (amd64) and CentOS 5 or later. They have no dependencies and install `/usr/bin/beige` with a current CA bundle in `/usr/share/beige`.
 - beige finds its CA bundle without setup: after `~/.beige/cacert.pem` it looks beside the executable, then in `/usr/local/share/beige` and `/usr/share/beige`. An unpacked release tarball works where it is, and `install.sh` installs are found too.
 - `beige status` and `/status` show the CA bundle in use.
 - Release builds download curl's current copy of Mozilla's CA store and check it against the published SHA-256.

@@ -85,7 +85,7 @@ There is no 80386 build. musl's atomics need the 486's `cmpxchg`, and Linux drop
 Each release has a tarball per build, plus `.deb` and `.rpm` packages of the `x86_64` and `i486` builds. Each holds `beige`, a current CA bundle, and the licenses of what is linked in, so nothing needs copying by hand. The packages have no dependencies and install `/usr/bin/beige`, with the bundle in `/usr/share/beige`:
 
 ```sh
-dpkg -i beige_0.2.0-1_amd64.deb        # Debian 3.1 or later; beige_0.2.0-1_i386.deb on 32-bit
+dpkg -i beige_0.2.0-1_amd64.deb        # Debian 4.0 or later; beige_0.2.0-1_i386.deb on 32-bit, from 3.1
 rpm -i beige-0.2.0-1.x86_64.rpm        # CentOS 5 or later; beige-0.2.0-1.i486.rpm on 32-bit
 ```
 
