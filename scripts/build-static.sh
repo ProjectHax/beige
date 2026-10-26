@@ -190,6 +190,8 @@ build_openssl() {
             CC="$TOOLS/cc" AR="$TOOLS/ar" RANLIB="$TOOLS/ranlib"
         make -j"$JOBS" build_libs
         make install_dev
+        mkdir -p "$DEPS/licenses"
+        cp LICENSE.txt "$DEPS/licenses/openssl.txt"
     )
     rm -rf "$TREE/openssl-$OPENSSL_VER"
 }
@@ -213,13 +215,15 @@ build_curl() {
         make -j"$JOBS" -C lib
         make -C lib install
         make -C include install
+        cp COPYING "$DEPS/licenses/curl.txt"
     )
     rm -rf "$TREE/curl-$CURL_VER"
 }
 
 build_deps() {
     want=$(deps_stamp)
-    if [ -f "$DEPS/stamp" ] && [ "$(cat "$DEPS/stamp")" = "$want" ] && [ -f "$DEPS/lib/libcurl.a" ]; then
+    if [ -f "$DEPS/stamp" ] && [ "$(cat "$DEPS/stamp")" = "$want" ] && [ -f "$DEPS/lib/libcurl.a" ] \
+        && [ -f "$DEPS/licenses/curl.txt" ]; then
         say "dependencies for $NAME are current"
         return 0
     fi
@@ -261,8 +265,7 @@ package() {
     chmod 755 "$stage/beige"
     fetch "$CA_URL" "$stage/cacert.pem"
     cp "$ROOT/LICENSE" "$ROOT/NOTICE" "$stage/"
-    gzip -dc "$WORK/cache/openssl-$OPENSSL_VER.tar.gz" | tar -xOf - "openssl-$OPENSSL_VER/LICENSE.txt" > "$stage/licenses/openssl.txt"
-    gzip -dc "$WORK/cache/curl-$CURL_VER.tar.gz" | tar -xOf - "curl-$CURL_VER/COPYING" > "$stage/licenses/curl.txt"
+    cp "$DEPS/licenses/openssl.txt" "$DEPS/licenses/curl.txt" "$stage/licenses/"
     awk '/^\/\*/ { on = 1; next } /\*\// { exit } on' "$ROOT/third_party/cJSON.h" > "$stage/licenses/cjson.txt"
     # zig's compiler_rt is linked in too, under zig's license.
     lib=$(zig_lib_dir)
