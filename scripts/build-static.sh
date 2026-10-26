@@ -3,7 +3,8 @@
 #
 #   sh scripts/build-static.sh build NAME                    OpenSSL, curl, and beige, packed into dist/
 #   sh scripts/build-static.sh check NAME                    the tests under qemu-user, then an instruction scan
-#   sh scripts/build-static.sh smoke NAME IMAGE PLATFORM     the packed binary inside an old distro container
+#   sh scripts/build-static.sh packages NAME                 a .deb and an .rpm of the packed binary (x86_64, i486)
+#   sh scripts/build-static.sh smoke NAME IMAGE PLATFORM     the packed binary and package inside an old distro container
 #
 # NAME is the oldest CPU the binary runs on:
 #   x86_64      any 64-bit x86
@@ -15,9 +16,11 @@
 # the 386 in 3.8. musl itself needs Linux 2.6 or later.
 #
 # build needs zig 0.15, make, perl, and curl or wget. check also needs qemu-user, objdump, and
-# python3; smoke needs docker (or DOCKER=podman) and python3. Downloads and dependency builds live
-# in WORK (default ~/.cache/beige-static). The dependencies rebuild when their versions or flags change.
+# python3; packages needs rpmbuild; smoke needs docker (or DOCKER=podman) and python3. Downloads and
+# dependency builds live in WORK (default ~/.cache/beige-static). The dependencies rebuild when their
+# versions or flags change.
 set -eu
+umask 022
 
 ROOT=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 WORK=${WORK:-${XDG_CACHE_HOME:-$HOME/.cache}/beige-static}
@@ -52,6 +55,7 @@ OPENSSL_SHA256=603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a
 CURL_SHA256=e3de77cfa6367083c776a26647fc9f633b538c06c3baa73d931a252ac8f72b49
 OPENSSL_URL="https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VER}/openssl-${OPENSSL_VER}.tar.gz"
 CURL_URL="https://curl.se/download/curl-${CURL_VER}.tar.gz"
+# curl's extraction of Mozilla's CA store, fetched fresh for every package.
 CA_URL="https://curl.se/ca/cacert.pem"
 MUSL_COPYRIGHT_URL="https://git.musl-libc.org/cgit/musl/plain/COPYRIGHT?h=v1.2.5"
 
@@ -87,6 +91,7 @@ pick() {
             OSSL_TARGET=linux-x86_64 OSSL_OPTS=
             QEMU="qemu-x86_64 -cpu qemu64"
             FORBID=
+            DEB_ARCH=amd64 RPM_ARCH=x86_64
             ;;
         i686-sse2)
             # OpenSSL's assembly picks SSE2 and later paths at run time from CPUID.
@@ -94,6 +99,7 @@ pick() {
             OSSL_TARGET=linux-x86 OSSL_OPTS=$X86_ATOMICS
             QEMU="qemu-i386 -cpu pentium3,sse2=on"
             FORBID=
+            DEB_ARCH= RPM_ARCH=
             ;;
         i686)
             # i686 rather than pentiumpro: LLVM's pentiumpro may emit multi-byte NOPs.
@@ -101,12 +107,15 @@ pick() {
             OSSL_TARGET=linux-x86 OSSL_OPTS="no-asm $X86_ATOMICS"
             QEMU="qemu-i386 -cpu pentium2"
             FORBID="$SIMD|$NOPL"
+            DEB_ARCH= RPM_ARCH=
             ;;
         i486)
             ZTARGET=x86-linux-musl CPU=i486 HOST=i486-pc-linux-musl
             OSSL_TARGET=linux-x86 OSSL_OPTS="no-asm $X86_ATOMICS"
             QEMU="qemu-i386 -cpu 486"
             FORBID="$SIMD|$NOPL|$P6|$P5"
+            # The packages for 32-bit distributions, since this binary runs on every 32-bit x86.
+            DEB_ARCH=i386 RPM_ARCH=i486
             ;;
         *)
             die "unknown build '$NAME' (x86_64, i686-sse2, i686, i486)"
@@ -153,6 +162,15 @@ fetch_checked() {
         rm -f "$2"
         die "checksum mismatch for $(basename "$2"): got $got. If install.sh moved to a new version, update the SHA256 here"
     fi
+}
+
+fetch_ca() {
+    rm -f "$1" "$1.sha256"
+    fetch "$CA_URL" "$1"
+    fetch "$CA_URL.sha256" "$1.sha256"
+    want=$(awk '{ print $1; exit }' "$1.sha256")
+    rm -f "$1.sha256"
+    [ "$(sha256_of "$1")" = "$want" ] || die "cacert.pem does not match $CA_URL.sha256"
 }
 
 unpack() {
@@ -263,7 +281,7 @@ package() {
         cp "$B/beige" "$stage/beige"
     fi
     chmod 755 "$stage/beige"
-    fetch "$CA_URL" "$stage/cacert.pem"
+    fetch_ca "$stage/cacert.pem"
     cp "$ROOT/LICENSE" "$ROOT/NOTICE" "$stage/"
     cp "$DEPS/licenses/openssl.txt" "$DEPS/licenses/curl.txt" "$stage/licenses/"
     awk '/^\/\*/ { on = 1; next } /\*\// { exit } on' "$ROOT/third_party/cJSON.h" > "$stage/licenses/cjson.txt"
@@ -282,12 +300,18 @@ package() {
     cat > "$stage/README" <<EOF
 beige $VERSION, static for Linux 2.6 or later on $NAME.
 
-    cp beige /usr/local/bin/
-    mkdir -p ~/.beige && cp cacert.pem ~/.beige/
+beige runs from this directory as it is: it finds cacert.pem beside itself. To
+install it elsewhere:
 
-The CA bundle is curl's copy of Mozilla's. beige reads ~/.beige/cacert.pem unless
-ca_bundle is set in ~/.beige/config.json. The licenses of the code linked into the
-binary (OpenSSL, curl, cJSON, musl, and zig's compiler_rt) are in licenses/.
+    cp beige /usr/local/bin/
+    mkdir -p /usr/local/share/beige && cp cacert.pem /usr/local/share/beige/
+
+cacert.pem is curl's copy of Mozilla's CA store, current when this was built.
+beige looks for it in ~/.beige, beside the executable, then in
+/usr/local/share/beige and /usr/share/beige, unless ca_bundle is set in
+~/.beige/config.json. "beige status" shows the one it found. The licenses of the
+code linked into the binary (OpenSSL, curl, cJSON, musl, and zig's compiler_rt)
+are in licenses/.
 EOF
     (cd "$TREE" && tar -cf - "$PKG") | gzip -9 > "$DIST/$PKG.tar.gz"
     say "wrote $DIST/$PKG.tar.gz"
@@ -301,6 +325,121 @@ cmd_build() {
     build_deps
     build_beige
     package
+}
+
+PKG_SUMMARY="terminal coding agent for old POSIX systems"
+PKG_DESC="beige is a terminal coding agent written in C. This build is static, with OpenSSL, curl, and a current CA bundle inside, so it needs no other packages and runs on Linux 2.6 or later."
+
+# The package tree, from the release tarball so the packages hold the same files.
+package_root() {
+    tarball=$DIST/$PKG.tar.gz
+    [ -f "$tarball" ] || die "no $tarball; run build $NAME first"
+    src=$TREE/pkgsrc
+    PROOT=$TREE/pkgroot
+    rm -rf "$src" "$PROOT"
+    mkdir -p "$src" "$PROOT/usr/bin" "$PROOT/usr/share/beige" "$PROOT/usr/share/doc/beige"
+    gzip -dc "$tarball" | (cd "$src" && tar -xf -)
+    cp "$src/$PKG/beige" "$PROOT/usr/bin/beige"
+    cp "$src/$PKG/cacert.pem" "$PROOT/usr/share/beige/cacert.pem"
+    cp "$src/$PKG/LICENSE" "$src/$PKG/NOTICE" "$PROOT/usr/share/doc/beige/"
+    cp -R "$src/$PKG/licenses" "$PROOT/usr/share/doc/beige/"
+    rm -rf "$src"
+    find "$PROOT" -type d -exec chmod 755 {} +
+    find "$PROOT" -type f -exec chmod 644 {} +
+    chmod 755 "$PROOT/usr/bin/beige"
+}
+
+tar_gz() {
+    (cd "$1" && tar --format=gnu --sort=name --owner=0 --group=0 --numeric-owner -cf - .) | gzip -9n > "$2"
+}
+
+# One member of an ar archive, laid out as dpkg-deb writes it: no trailing slash on the name.
+ar_member() {
+    size=$(wc -c < "$1/$2" | tr -d ' ')
+    printf '%-16s%-12s%-6s%-6s%-8s%-10s`\n' "$2" "$now" 0 0 100644 "$size"
+    cat "$1/$2"
+    if [ $((size % 2)) -eq 1 ]; then
+        printf '\n'
+    fi
+}
+
+# Built by hand rather than with dpkg-deb, which now defaults to xz. dpkg before 1.15.6 (Debian 5
+# and older) reads only gzip members.
+build_deb() {
+    dir=$TREE/deb
+    rm -rf "$dir"
+    mkdir -p "$dir/control"
+    {
+        printf 'Package: beige\nVersion: %s-1\nArchitecture: %s\nMaintainer: ProjectHax LLC\n' "$VERSION" "$DEB_ARCH"
+        printf 'Installed-Size: %s\nSection: devel\nPriority: optional\n' "$(du -sk "$PROOT" | awk '{ print $1 }')"
+        printf 'Description: %s\n' "$PKG_SUMMARY"
+        printf '%s\n' "$PKG_DESC" | fold -s -w 72 | sed 's/ *$//; s/^/ /'
+    } > "$dir/control/control"
+    (cd "$PROOT" && find . -type f | sed 's|^\./||' | sort | xargs md5sum) > "$dir/control/md5sums"
+    tar_gz "$dir/control" "$dir/control.tar.gz"
+    tar_gz "$PROOT" "$dir/data.tar.gz"
+    printf '2.0\n' > "$dir/debian-binary"
+    now=$(date +%s)
+    out=$DIST/beige_$VERSION-1_$DEB_ARCH.deb
+    {
+        printf '!<arch>\n'
+        ar_member "$dir" debian-binary
+        ar_member "$dir" control.tar.gz
+        ar_member "$dir" data.tar.gz
+    } > "$out"
+    rm -rf "$dir"
+    say "wrote $out"
+}
+
+# gzip payload and MD5 file digests: rpm before 4.7 (CentOS 5) reads neither xz nor SHA-256 digests.
+build_rpm() {
+    have rpmbuild || die "rpmbuild is required for the .rpm (the rpm package on Debian and Ubuntu)"
+    top=$TREE/rpm
+    rm -rf "$top"
+    mkdir -p "$top"
+    cat > "$top/beige.spec" <<EOF
+Name: beige
+Version: $VERSION
+Release: 1
+Summary: Terminal coding agent for old POSIX systems
+License: GPLv3
+Group: Development/Tools
+AutoReqProv: no
+
+%description
+$(printf '%s\n' "$PKG_DESC" | fold -s -w 72 | sed 's/ *$//')
+
+%install
+mkdir -p %{buildroot}
+cp -R $PROOT/. %{buildroot}/
+
+%files
+%defattr(-,root,root,-)
+/usr/bin/beige
+/usr/share/beige
+/usr/share/doc/beige
+EOF
+    rpmbuild -bb --quiet --target "$RPM_ARCH" \
+        --define "_topdir $top" --define "_rpmdir $DIST" \
+        --define "_build_name_fmt %%{NAME}-%%{VERSION}-%%{RELEASE}.%%{ARCH}.rpm" \
+        --define "_binary_payload w9.gzdio" --define "_binary_filedigest_algorithm 1" \
+        --define "__os_install_post %{nil}" --define "debug_package %{nil}" --define "_build_id_links none" \
+        --define "source_date_epoch_from_changelog 0" \
+        "$top/beige.spec"
+    rm -rf "$top"
+    say "wrote $DIST/beige-$VERSION-1.$RPM_ARCH.rpm"
+}
+
+cmd_packages() {
+    pick "$1"
+    if [ -z "$DEB_ARCH" ]; then
+        say "no packages for $NAME; the x86_64 and i486 builds have them"
+        return 0
+    fi
+    package_root
+    build_deb
+    build_rpm
+    rm -rf "$PROOT"
 }
 
 # Every instruction in the binary, reachable or not, against the CPU's list. musl's fenv code
@@ -351,21 +490,37 @@ cmd_check() {
     scan
 }
 
-# Runs inside the container with that distro's /bin/sh, which the bash tool uses.
+# Runs inside the container with that distro's /bin/sh, which the bash tool uses. The unpacked
+# tarball is at /smoke/$PKG; a package for this distribution, if any, is installed and run too.
 SMOKE_SCRIPT='set -e
 cat /etc/redhat-release /etc/debian_version 2>/dev/null || true
 BEIGE_HOME=/tmp/beige-home
 export BEIGE_HOME
 mkdir -p "$BEIGE_HOME"
 cd /tmp
-/beige/beige -v
-for provider in anthropic openai; do
-    out=$(/beige/beige --provider $provider --model test --api-key test --base-url "http://127.0.0.1:$PORT" \
-        --no-context --mode auto -p "say hi")
-    printf "%s\n" "$out"
-    printf "%s\n" "$out" | grep beige-ok >/dev/null
-    printf "%s\n" "$out" | grep done >/dev/null
-done
+exchange() {
+    "$1" -v
+    for provider in anthropic openai; do
+        out=$("$1" --provider $provider --model test --api-key test --base-url "http://127.0.0.1:$PORT" \
+            --no-context --mode auto -p "say hi")
+        printf "%s\n" "$out"
+        printf "%s\n" "$out" | grep beige-ok >/dev/null
+        printf "%s\n" "$out" | grep done >/dev/null
+    done
+    "$1" status | grep "^ca bundle: $2\$"
+}
+exchange "/smoke/$PKG/beige" "/smoke/$PKG/cacert.pem"
+installed=
+if [ -n "$DEB" ] && command -v dpkg >/dev/null 2>&1; then
+    dpkg -i "/smoke/$DEB"
+    installed=yes
+elif [ -n "$RPM" ] && command -v rpm >/dev/null 2>&1; then
+    rpm -i "/smoke/$RPM"
+    installed=yes
+fi
+if [ -n "$installed" ]; then
+    exchange /usr/bin/beige /usr/share/beige/cacert.pem
+fi
 echo "smoke ok"'
 
 cmd_smoke() {
@@ -379,12 +534,21 @@ cmd_smoke() {
     mock=
     trap 'if [ -n "$mock" ]; then kill "$mock" 2>/dev/null || true; fi; rm -rf "$tmp"' EXIT
     gzip -dc "$tarball" | (cd "$tmp" && tar -xf -)
+    deb=
+    rpm=
+    if [ -n "$DEB_ARCH" ]; then
+        deb=beige_$VERSION-1_$DEB_ARCH.deb
+        rpm=beige-$VERSION-1.$RPM_ARCH.rpm
+        [ -f "$DIST/$deb" ] && [ -f "$DIST/$rpm" ] || die "no $deb or $rpm in $DIST; run packages $NAME first"
+        cp "$DIST/$deb" "$DIST/$rpm" "$tmp/"
+    fi
     port=$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1]);s.close()')
     python3 "$ROOT/tests/mock_sse.py" "$port" > "$tmp/mock.log" 2>&1 &
     mock=$!
     sleep 1
-    "$DOCKER" run --rm --network host --platform "$platform" -e PORT="$port" \
-        -v "$tmp/$PKG:/beige:ro,Z" "$image" /bin/sh -c "$SMOKE_SCRIPT"
+    "$DOCKER" run --rm --network host --platform "$platform" \
+        -e PORT="$port" -e PKG="$PKG" -e DEB="$deb" -e RPM="$rpm" \
+        -v "$tmp:/smoke:ro,Z" "$image" /bin/sh -c "$SMOKE_SCRIPT"
 }
 
 case "${1:-}" in
@@ -395,6 +559,10 @@ case "${1:-}" in
     check)
         [ $# -eq 2 ] || die "usage: check NAME"
         cmd_check "$2"
+        ;;
+    packages)
+        [ $# -eq 2 ] || die "usage: packages NAME"
+        cmd_packages "$2"
         ;;
     smoke)
         [ $# -eq 4 ] || die "usage: smoke NAME IMAGE PLATFORM"

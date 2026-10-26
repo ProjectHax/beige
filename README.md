@@ -1,7 +1,7 @@
 # beige
 
 ```
-┌─ beige 0.1.0 ───────────────────────────────────────────────────────────────┐
+┌─ beige 0.2.0 ───────────────────────────────────────────────────────────────┐
 │ _          _                                                                │
 │| |__  ___ (_) __ _  ___   terminal coding agent                             │
 │| '_ \/ -_)| |/ _` |/ -_)  ~/src/beige                                       │
@@ -67,7 +67,7 @@ make CURL_CFLAGS="-I/opt/beige-deps/include" \
      CURL_LIBS="/opt/beige-deps/lib/libcurl.a /opt/beige-deps/lib/libssl.a /opt/beige-deps/lib/libcrypto.a -ldl -lpthread"
 ```
 
-Copy a current CA bundle to `~/.beige/cacert.pem` (or set `ca_bundle` in the config). Public APIs will not trust a 2004 certificate store. curl still honors `http_proxy`, `https_proxy`, and `no_proxy`.
+Public APIs will not trust a 2004 certificate store, so beige brings its own. Unless `ca_bundle` is set in the config, it uses the first `cacert.pem` it finds in `~/.beige`, beside the `beige` executable, in `/usr/local/share/beige`, or in `/usr/share/beige`. `install.sh`, the release tarballs, and the packages put a current one in place. `beige status` shows which bundle is in use. curl still honors `http_proxy`, `https_proxy`, and `no_proxy`.
 
 ### Static binaries
 
@@ -82,17 +82,23 @@ CI builds beige static against musl with `zig cc`, with OpenSSL and curl inside.
 
 There is no 80386 build. musl's atomics need the 486's `cmpxchg`, and Linux dropped the 386 in 3.8.
 
-Each tarball holds `beige`, a CA bundle, and the licenses of what is linked in:
+Each release has a tarball per build, plus `.deb` and `.rpm` packages of the `x86_64` and `i486` builds. Each holds `beige`, a current CA bundle, and the licenses of what is linked in, so nothing needs copying by hand. The packages have no dependencies and install `/usr/bin/beige`, with the bundle in `/usr/share/beige`:
 
 ```sh
-tar -xzf beige-0.1.0-linux-i486.tar.gz
-cp beige-0.1.0-linux-i486/beige /usr/local/bin/
-mkdir -p ~/.beige && cp beige-0.1.0-linux-i486/cacert.pem ~/.beige/
+dpkg -i beige_0.2.0-1_amd64.deb        # Debian 3.1 or later; beige_0.2.0-1_i386.deb on 32-bit
+rpm -i beige-0.2.0-1.x86_64.rpm        # CentOS 5 or later; beige-0.2.0-1.i486.rpm on 32-bit
 ```
 
-CI runs the tests under qemu-user on the oldest CPU model for each build, and scans the `i686` and `i486` binaries for instructions those CPUs lack. It also runs each binary in a CentOS 5 or 6 or Debian 3.1, 4.0, or 5.0 container, though those containers share a current kernel. A `v` tag attaches the tarballs to a GitHub release.
+A tarball runs where it is unpacked, since beige finds the `cacert.pem` beside it:
 
-To build one here, run `sh scripts/build-static.sh build i486`, then `check i486`. `build` needs zig 0.15, perl, and make. `check` also needs qemu-user and objdump.
+```sh
+tar -xzf beige-0.2.0-linux-i686.tar.gz
+./beige-0.2.0-linux-i686/beige
+```
+
+CI runs the tests under qemu-user on the oldest CPU model for each build, and scans the `i686` and `i486` binaries for instructions those CPUs lack. It also runs each binary in a CentOS 5 or 6 or Debian 3.1, 4.0, or 5.0 container and installs the packages there with that distribution's `rpm` or `dpkg`, though those containers share a current kernel. A `v` tag attaches the tarballs to a GitHub release, whose notes are that version's section of [CHANGELOG.md](CHANGELOG.md).
+
+To build one here, run `sh scripts/build-static.sh build i486`, then `check i486`. `build` needs zig 0.15, perl, and make. `check` also needs qemu-user and objdump, and `packages i486` needs rpmbuild.
 
 ## Credentials
 

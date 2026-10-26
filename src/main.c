@@ -8,7 +8,7 @@
 #include <termios.h>
 #include <unistd.h>
 
-#define BEIGE_VERSION "0.1.0"
+#define BEIGE_VERSION "0.2.0"
 
 static const char *HELP =
     "beige " BEIGE_VERSION " — terminal coding agent\n"
