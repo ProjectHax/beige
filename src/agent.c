@@ -8,6 +8,7 @@
 #include <dirent.h>
 #include <sys/stat.h>
 #include <time.h>
+#include <unistd.h>
 
 void app_init(App *app) {
     memset(app, 0, sizeof *app);
@@ -101,9 +102,45 @@ void app_refresh_status(App *app) {
     }
 }
 
+/* The CA bundle when the config names none: ~/.beige/cacert.pem, then cacert.pem beside the executable
+ * as a release tarball unpacks it, then where install.sh and the .deb and .rpm packages put it. */
+static char *find_ca_bundle(void) {
+    static const char *const shared[] = {"/usr/local/share/beige/cacert.pem", "/usr/share/beige/cacert.pem"};
+    char exe[4096];
+    char *home = beige_home();
+    char *ca = path_join(home, "cacert.pem");
+    char *slash;
+    ssize_t n;
+    size_t k;
+    free(home);
+    if (file_exists(ca)) {
+        return ca;
+    }
+    free(ca);
+    /* Linux names the running executable here; elsewhere the readlink fails and this step is skipped. */
+    n = readlink("/proc/self/exe", exe, sizeof exe - 1);
+    if (n > 0) {
+        exe[n] = '\0';
+        slash = strrchr(exe, '/');
+        if (slash) {
+            *slash = '\0';
+            ca = path_join(exe[0] ? exe : "/", "cacert.pem");
+            if (file_exists(ca)) {
+                return ca;
+            }
+            free(ca);
+        }
+    }
+    for (k = 0; k < sizeof shared / sizeof shared[0]; k++) {
+        if (file_exists(shared[k])) {
+            return xstrdup(shared[k]);
+        }
+    }
+    return NULL;
+}
+
 int app_prepare(App *app, char **err) {
     PermMode mode = MODE_ASK;
-    char *ca;
     if (err) {
         *err = NULL;
     }
@@ -150,14 +187,7 @@ int app_prepare(App *app, char **err) {
     if (app->cfg.ca_bundle && app->cfg.ca_bundle[0]) {
         app->http.ca_bundle = xstrdup(app->cfg.ca_bundle);
     } else {
-        char *home = beige_home();
-        ca = path_join(home, "cacert.pem");
-        free(home);
-        if (file_exists(ca)) {
-            app->http.ca_bundle = ca;
-        } else {
-            free(ca);
-        }
+        app->http.ca_bundle = find_ca_bundle();
     }
     app->http.cancel = &g_sigint;
     http_init();
