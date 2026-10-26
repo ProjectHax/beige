@@ -74,6 +74,11 @@ NOPL='nop[lw]'
 P6='cmov|fcomi|fucomi|fcmov|endbr'
 P5='cmpxchg8b'
 
+# On 32-bit x86 clang cannot prove a uint64_t is 8-byte aligned, so OpenSSL's 64-bit atomics become
+# libatomic calls (__atomic_is_lock_free, __atomic_compare_exchange) that zig does not provide.
+# This switches OpenSSL to its mutex fallback.
+X86_ATOMICS=-DBROKEN_CLANG_ATOMICS
+
 pick() {
     NAME=$1
     case "$NAME" in
@@ -86,21 +91,20 @@ pick() {
         i686-sse2)
             # OpenSSL's assembly picks SSE2 and later paths at run time from CPUID.
             ZTARGET=x86-linux-musl CPU=pentium4 HOST=i686-pc-linux-musl
-            OSSL_TARGET=linux-x86 OSSL_OPTS=
+            OSSL_TARGET=linux-x86 OSSL_OPTS=$X86_ATOMICS
             QEMU="qemu-i386 -cpu pentium3,sse2=on"
             FORBID=
             ;;
         i686)
             # i686 rather than pentiumpro: LLVM's pentiumpro may emit multi-byte NOPs.
             ZTARGET=x86-linux-musl CPU=i686 HOST=i686-pc-linux-musl
-            OSSL_TARGET=linux-x86 OSSL_OPTS=no-asm
+            OSSL_TARGET=linux-x86 OSSL_OPTS="no-asm $X86_ATOMICS"
             QEMU="qemu-i386 -cpu pentium2"
             FORBID="$SIMD|$NOPL"
             ;;
         i486)
-            # No cmpxchg8b, so 64-bit atomics would be library calls. OpenSSL's mutex fallback is simpler.
             ZTARGET=x86-linux-musl CPU=i486 HOST=i486-pc-linux-musl
-            OSSL_TARGET=linux-x86 OSSL_OPTS="no-asm -DBROKEN_CLANG_ATOMICS"
+            OSSL_TARGET=linux-x86 OSSL_OPTS="no-asm $X86_ATOMICS"
             QEMU="qemu-i386 -cpu 486"
             FORBID="$SIMD|$NOPL|$P6|$P5"
             ;;
@@ -201,7 +205,11 @@ build_curl() {
         PKG_CONFIG_LIBDIR=$DEPS/lib/pkgconfig PKG_CONFIG_PATH= \
             ./configure --host="$HOST" --prefix="$DEPS" --with-openssl="$DEPS" $CURL_FLAGS \
             CC="$TOOLS/cc" AR="$TOOLS/ar" RANLIB="$TOOLS/ranlib" CFLAGS=-O2 LDFLAGS=-static \
-            ac_cv_func_eventfd=no
+            ac_cv_func_eventfd=no || {
+            # configure's own message rarely names the cause; the compiler and linker errors are in here.
+            grep -i 'error' config.log | tail -n 30
+            exit 1
+        }
         make -j"$JOBS" -C lib
         make -C lib install
         make -C include install
